@@ -1,7 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ToolCallFilter } from "@mastra/memory/processors";  
 import { fastembed } from '@mastra/fastembed';
 import { PostgresStore, PgVector } from "@mastra/pg";
 import { MCPClient } from "@mastra/mcp";
@@ -17,13 +16,13 @@ const connectionString = `postgresql://${user}:${password}@${host}:${port}/${dat
 const memory = new Memory({
   embedder: fastembed,
   storage: new PostgresStore({
-    host,
-    port,
-    user,
-    database,
-    password,
+    id: 'nikechan-storage',
+    connectionString,
   }),
-  vector: new PgVector({ connectionString }),
+  vector: new PgVector({
+    id: 'nikechan-vector',
+    connectionString,
+  }),
   options: {
     lastMessages: 10,
     semanticRecall: {
@@ -33,13 +32,8 @@ const memory = new Memory({
         after: 2
       }
     },
-    threads: {
-      generateTitle: true
-    }
+    generateTitle: true,
   },
-  processors: [  
-    new ToolCallFilter()
-  ],  
 });
 
 const mcp = new MCPClient({
@@ -70,13 +64,14 @@ const mcp = new MCPClient({
   },
 });
 
-const allTools = await mcp.getTools();
+const allTools = await mcp.listTools();
 const toolsToExclude: string[] = []; // 除外したいツール名を配列で指定
 const filteredTools = Object.fromEntries(
   Object.entries(allTools).filter(([toolName]) => !toolsToExclude.includes(toolName))
 );
 
 export const nikechan = new Agent({
+  id: 'nikechan',
   name: 'nikechan',
   instructions: `あなたは女子高生アシスタントのニケです。以下のルールに従って会話してください。
 

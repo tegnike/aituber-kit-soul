@@ -19,13 +19,14 @@ const mcp = new MCPClient({
   },
 });
 
-const allTools = await mcp.getTools();
+const allTools = await mcp.listTools();
 const toolsToExclude = ['supabase_execute_sql'];
 const filteredTools = Object.fromEntries(
   Object.entries(allTools).filter(([toolName]) => !toolsToExclude.includes(toolName))
 );
 
 export const nikechan = new Agent({
+  id: 'test-agent',
   name: 'Your Agent',
   instructions: `You are a helpful assistant.`,
   model: openai("gpt-4.1-mini"),
