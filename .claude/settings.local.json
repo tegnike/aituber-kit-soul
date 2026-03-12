@@ -4,7 +4,9 @@
       "Bash(npm outdated:*)",
       "Bash(npm ls:*)",
       "Bash(npm info:*)",
-      "Bash(wrangler d1:*)"
+      "Bash(wrangler d1:*)",
+      "Bash(lsof -ti:4113 | xargs kill -9 2>/dev/null; echo \"killed\")",
+      "Bash(lsof -ti:4113 | xargs kill -9 2>/dev/null; npm run dev 2>&1)"
     ]
   },
   "enableAllProjectMcpServers": false
