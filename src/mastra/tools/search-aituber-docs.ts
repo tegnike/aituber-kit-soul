@@ -4,26 +4,30 @@ import { z } from 'zod';
 
 const LIBRARY_ID = '/tegnike/aituber-kit-docs';
 
-// Context7 MCPクライアント（AITuberKitドキュメント検索専用）
-const context7 = new MCPClient({
-  servers: {
-    context7: {
-      url: new URL("https://mcp.context7.com/mcp"),
-    },
-  },
-});
+let context7Tools: Awaited<ReturnType<MCPClient['listTools']>> | undefined;
+let queryDocsToolName: string | undefined;
 
-// Context7ツールを取得（モジュール初期化時）
-const context7Tools = await context7.listTools();
-const queryDocsToolName = Object.keys(context7Tools).find(
-  name => name.includes('query') && name.includes('doc')
-);
-
-if (!queryDocsToolName) {
-  console.warn(
-    '[search-aituber-docs] Context7 query-docs tool not found. Available:',
-    Object.keys(context7Tools),
-  );
+async function getQueryDocsTool() {
+  if (!context7Tools) {
+    const context7 = new MCPClient({
+      servers: {
+        context7: {
+          url: new URL("https://mcp.context7.com/mcp"),
+        },
+      },
+    });
+    context7Tools = await context7.listTools();
+    queryDocsToolName = Object.keys(context7Tools).find(
+      name => name.includes('query') && name.includes('doc')
+    );
+    if (!queryDocsToolName) {
+      console.warn(
+        '[search-aituber-docs] Context7 query-docs tool not found. Available:',
+        Object.keys(context7Tools),
+      );
+    }
+  }
+  return queryDocsToolName ? context7Tools[queryDocsToolName] : undefined;
 }
 
 export const searchAituberDocs = createTool({
@@ -36,11 +40,11 @@ export const searchAituberDocs = createTool({
       .describe('検索したい内容を具体的に記述してください'),
   }),
   execute: async (inputData) => {
-    if (!queryDocsToolName) {
+    const tool = await getQueryDocsTool();
+    if (!tool) {
       return { error: 'Context7 query-docs tool is not available' };
     }
 
-    const tool = context7Tools[queryDocsToolName];
     const result = await tool.execute?.({
       libraryId: LIBRARY_ID,
       query: inputData.query,
