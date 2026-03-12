@@ -1,34 +1,48 @@
 import { createTool } from '@mastra/core/tools';
-import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';
 
 const LIBRARY_ID = '/tegnike/aituber-kit-docs';
-const MAX_RETRIES = 2;
+const CONTEXT7_URL = 'https://mcp.context7.com/mcp';
 
-let context7Tools: Awaited<ReturnType<MCPClient['listTools']>> | undefined;
-let queryDocsToolName: string | undefined;
-
-async function getQueryDocsTool() {
-  if (!context7Tools) {
-    const context7 = new MCPClient({
-      servers: {
-        context7: {
-          url: new URL("https://mcp.context7.com/mcp"),
+/**
+ * Context7 APIに直接HTTPリクエストを送信する
+ * MCPクライアント経由だとWorkers環境で不安定なため、直接JSON-RPCを叩く
+ */
+async function queryContext7Docs(query: string): Promise<string> {
+  const response = await fetch(CONTEXT7_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'query-docs',
+        arguments: {
+          libraryId: LIBRARY_ID,
+          query,
         },
       },
-    });
-    context7Tools = await context7.listTools();
-    queryDocsToolName = Object.keys(context7Tools).find(
-      name => name.includes('query') && name.includes('doc')
-    );
-    if (!queryDocsToolName) {
-      console.warn(
-        '[search-aituber-docs] Context7 query-docs tool not found. Available:',
-        Object.keys(context7Tools),
-      );
-    }
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Context7 API error (${response.status}): ${await response.text()}`);
   }
-  return queryDocsToolName ? context7Tools[queryDocsToolName] : undefined;
+
+  const data = await response.json() as {
+    result?: { content?: { text?: string }[] };
+    error?: { message?: string };
+  };
+
+  if (data.error) {
+    throw new Error(`Context7 API error: ${data.error.message}`);
+  }
+
+  return data.result?.content?.[0]?.text || 'ドキュメントが見つかりませんでした';
 }
 
 export const searchAituberDocs = createTool({
@@ -41,30 +55,12 @@ export const searchAituberDocs = createTool({
       .describe('検索したい内容を具体的に記述してください'),
   }),
   execute: async (inputData) => {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const tool = await getQueryDocsTool();
-        if (!tool) {
-          return { error: 'Context7 query-docs tool is not available' };
-        }
-
-        const result = await tool.execute?.({
-          libraryId: LIBRARY_ID,
-          query: inputData.query,
-        }, {});
-
-        return result;
-      } catch (e) {
-        lastError = e;
-        console.warn(`[search-aituber-docs] Attempt ${attempt + 1} failed:`, e);
-        // MCPクライアントのキャッシュをリセットして再接続を試みる
-        context7Tools = undefined;
-        queryDocsToolName = undefined;
-      }
+    try {
+      const result = await queryContext7Docs(inputData.query);
+      return { content: result };
+    } catch (e) {
+      console.error('[search-aituber-docs] Error:', e);
+      return { error: `ドキュメント検索に失敗しました: ${e}` };
     }
-
-    return { error: `ドキュメント検索に失敗しました: ${lastError}` };
   },
 });
