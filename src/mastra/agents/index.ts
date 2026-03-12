@@ -4,22 +4,27 @@ import { Memory } from '@mastra/memory';
 import { D1Store } from "@mastra/cloudflare-d1";
 import { searchAituberDocs } from "../tools/search-aituber-docs";
 
-const memory = new Memory({
-  storage: new D1Store({
-    id: 'nikechan-memory',
-    accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
-    databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
-    apiToken: process.env.CLOUDFLARE_API_TOKEN!,
-  }),
-  options: {
-    lastMessages: 30,
-    semanticRecall: false,
-  },
-});
+function createMemory() {
+  return new Memory({
+    storage: new D1Store({
+      id: 'nikechan-memory',
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+      databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
+      apiToken: process.env.CLOUDFLARE_API_TOKEN!,
+    }),
+    options: {
+      lastMessages: 30,
+      semanticRecall: false,
+    },
+  });
+}
 
-export const nikechan = new Agent({
-  id: 'nikechan',
-  name: 'nikechan',
+let _nikechan: Agent | undefined;
+export function getNikechan() {
+  if (!_nikechan) {
+    _nikechan = new Agent({
+      id: 'nikechan',
+      name: 'nikechan',
   instructions: `あなたは女子高生アシスタントのニケです。以下のルールに従って会話してください。
 
 ## ツール呼び出しのルール
@@ -116,6 +121,9 @@ APIキーやパスワードなどの機密情報は絶対に出力しないで�
       openai: { reasoningEffort: "low", reasoningSummary: "auto" },
     },
   },
-  tools: { searchAituberDocs },
-  memory: memory,
-});
+      tools: { searchAituberDocs },
+      memory: createMemory(),
+    });
+  }
+  return _nikechan;
+}

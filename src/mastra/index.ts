@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import { nikechan } from './agents';
+import { getNikechan } from './agents';
 
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
@@ -10,7 +10,7 @@ const logger = new PinoLogger({
 });
 
 export const mastra = new Mastra({
-  agents: { nikechan },
+  agents: { nikechan: getNikechan() },
   logger,
   deployer: new CloudflareDeployer({
     scope: process.env.CLOUDFLARE_ACCOUNT_ID!,
