@@ -1,23 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { D1Store } from "@mastra/cloudflare-d1";
 import { searchAituberDocs } from "../tools/search-aituber-docs";
-
-function createMemory() {
-  return new Memory({
-    storage: new D1Store({
-      id: 'nikechan-memory',
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
-      databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
-      apiToken: process.env.CLOUDFLARE_API_TOKEN!,
-    }),
-    options: {
-      lastMessages: 30,
-      semanticRecall: false,
-    },
-  });
-}
 
 let _nikechan: Agent | undefined;
 export function getNikechan() {
@@ -122,7 +105,6 @@ APIキーやパスワードなどの機密情報は絶対に出力しないで�
     },
   },
       tools: { searchAituberDocs },
-      memory: createMemory(),
     });
   }
   return _nikechan;
