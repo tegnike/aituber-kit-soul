@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm outdated:*)",
       "Bash(npm ls:*)",
-      "Bash(npm info:*)"
+      "Bash(npm info:*)",
+      "Bash(wrangler d1:*)"
     ]
   },
   "enableAllProjectMcpServers": false

@@ -1,16 +1,16 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { PostgresStore } from "@mastra/pg";
+import { D1Store } from "@mastra/cloudflare-d1";
 import { MCPClient } from "@mastra/mcp";
 import { searchAituberDocs } from "../tools/search-aituber-docs";
 
-const connectionString = `postgresql://${process.env.DB_USER || "postgres"}:${process.env.DB_PASSWORD || "postgres"}@${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5432"}/${process.env.DB_DATABASE || "postgres"}`;
-
 const memory = new Memory({
-  storage: new PostgresStore({
-    id: 'nikechan-storage',
-    connectionString,
+  storage: new D1Store({
+    id: 'nikechan-memory',
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+    databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
+    apiToken: process.env.CLOUDFLARE_API_TOKEN!,
   }),
   options: {
     lastMessages: 30,
