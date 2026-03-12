@@ -3,6 +3,7 @@ import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';
 
 const LIBRARY_ID = '/tegnike/aituber-kit-docs';
+const MAX_RETRIES = 2;
 
 let context7Tools: Awaited<ReturnType<MCPClient['listTools']>> | undefined;
 let queryDocsToolName: string | undefined;
@@ -40,16 +41,30 @@ export const searchAituberDocs = createTool({
       .describe('検索したい内容を具体的に記述してください'),
   }),
   execute: async (inputData) => {
-    const tool = await getQueryDocsTool();
-    if (!tool) {
-      return { error: 'Context7 query-docs tool is not available' };
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const tool = await getQueryDocsTool();
+        if (!tool) {
+          return { error: 'Context7 query-docs tool is not available' };
+        }
+
+        const result = await tool.execute?.({
+          libraryId: LIBRARY_ID,
+          query: inputData.query,
+        }, {});
+
+        return result;
+      } catch (e) {
+        lastError = e;
+        console.warn(`[search-aituber-docs] Attempt ${attempt + 1} failed:`, e);
+        // MCPクライアントのキャッシュをリセットして再接続を試みる
+        context7Tools = undefined;
+        queryDocsToolName = undefined;
+      }
     }
 
-    const result = await tool.execute?.({
-      libraryId: LIBRARY_ID,
-      query: inputData.query,
-    }, {});
-
-    return result;
+    return { error: `ドキュメント検索に失敗しました: ${lastError}` };
   },
 });
