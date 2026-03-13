@@ -105,7 +105,7 @@ const saveMessages = async (c: Context, next: Next) => {
     }
   }
 
-  // セッションID取得
+  // セッションID取得（memory.thread > threadId > 自動生成）
   const memory = body.memory as Record<string, unknown> | undefined;
   if (memory?.thread) {
     if (typeof memory.thread === 'string') {
@@ -117,9 +117,12 @@ const saveMessages = async (c: Context, next: Next) => {
   if (!sessionId && typeof body.threadId === 'string') {
     sessionId = body.threadId;
   }
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+  }
 
-  if (!sessionId || !userContent) {
-    console.log('[saveMessages] no sessionId or userContent, skipping', { sessionId, userContent: !!userContent });
+  if (!userContent) {
+    console.log('[saveMessages] no userContent, skipping');
     return next();
   }
 
