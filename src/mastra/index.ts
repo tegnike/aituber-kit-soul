@@ -115,7 +115,8 @@ const saveMessages = async (c: Context, next: Next) => {
     }
   }
   if (!sessionId && typeof body.threadId === 'string') {
-    sessionId = body.threadId;
+    // "session_xxxx-..." 形式の場合はプレフィックスを除去
+    sessionId = body.threadId.replace(/^session_/, '');
   }
   if (!sessionId) {
     sessionId = crypto.randomUUID();
