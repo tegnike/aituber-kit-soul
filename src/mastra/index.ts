@@ -10,6 +10,29 @@ const logger = new PinoLogger({
   level: 'debug',
 });
 
+const lastMessageOnly = async (c: Context, next: Next) => {
+  if (
+    c.req.method === 'POST' &&
+    c.req.path.includes('/agents/') &&
+    (c.req.path.endsWith('/generate') || c.req.path.endsWith('/stream'))
+  ) {
+    try {
+      const body = await c.req.json();
+      if (Array.isArray(body.messages) && body.messages.length > 1) {
+        body.messages = [body.messages[body.messages.length - 1]];
+        c.req.raw = new Request(c.req.url, {
+          method: c.req.method,
+          headers: c.req.raw.headers,
+          body: JSON.stringify(body),
+        });
+      }
+    } catch {
+      // bodyのパースに失敗した場合はそのまま通す
+    }
+  }
+  return next();
+};
+
 const apiKeyAuth = async (c: Context, next: Next) => {
   // /health はAPIキー不要
   if (c.req.path.endsWith('/health')) {
@@ -35,7 +58,7 @@ export const mastra = new Mastra({
   agents: { nikechan: getNikechan() },
   logger,
   server: {
-    middleware: [apiKeyAuth],
+    middleware: [lastMessageOnly, apiKeyAuth],
   },
   deployer: new CloudflareDeployer({
     scope: process.env.CLOUDFLARE_ACCOUNT_ID!,
