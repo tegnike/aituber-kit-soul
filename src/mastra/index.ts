@@ -132,24 +132,45 @@ const saveMessages = async (c: Context, next: Next) => {
 
   await next();
 
-  // レスポンス側の処理
+  // Supabaseへの保存処理（Cloudflare Workers対応: waitUntilでバックグラウンド実行）
+  const saveToSupabase = async (assistantText: string) => {
+    if (!assistantText) return;
+    try {
+      await ensureSession(capturedSessionId);
+      await saveMessage({ sessionId: capturedSessionId, role: 'user', content: capturedUserContent });
+      await saveMessage({ sessionId: capturedSessionId, role: 'assistant', content: assistantText });
+    } catch (e) {
+      console.error('[saveMessages] save error:', e);
+    }
+  };
+
+  // waitUntilが使えればバックグラウンドで実行（Cloudflare Workers）
+  const waitUntil = (promise: Promise<unknown>) => {
+    try {
+      const ctx = c.executionCtx;
+      if (ctx && typeof ctx.waitUntil === 'function') {
+        ctx.waitUntil(promise);
+        return;
+      }
+    } catch {
+      // executionCtxが存在しない環境（ローカル開発等）
+    }
+    // fallback: fire-and-forget
+    promise.catch((e: unknown) => console.error('[saveMessages] background error:', e));
+  };
+
   try {
     if (!isStream) {
       // /generate: JSONレスポンスからtextを取得
       const resClone = c.res.clone();
-      resClone.json().then(async (data: Record<string, unknown>) => {
-        const assistantText = typeof data.text === 'string' ? data.text : '';
-        if (!assistantText) return;
-        try {
-          await ensureSession(capturedSessionId);
-          await saveMessage({ sessionId: capturedSessionId, role: 'user', content: capturedUserContent });
-          await saveMessage({ sessionId: capturedSessionId, role: 'assistant', content: assistantText });
-        } catch (e) {
-          console.error('[saveMessages] generate save error:', e);
-        }
-      }).catch((e: unknown) => {
-        console.error('[saveMessages] generate response parse error:', e);
-      });
+      waitUntil(
+        resClone.json().then(async (data: Record<string, unknown>) => {
+          const assistantText = typeof data.text === 'string' ? data.text : '';
+          await saveToSupabase(assistantText);
+        }).catch((e: unknown) => {
+          console.error('[saveMessages] generate response parse error:', e);
+        })
+      );
     } else {
       // /stream: SSEストリームを分岐して読み取り
       const originalBody = c.res.body;
@@ -164,18 +185,13 @@ const saveMessages = async (c: Context, next: Next) => {
       });
 
       // バックグラウンドでストリームを収集・保存
-      collectStreamText(collectStream).then(async (assistantText) => {
-        if (!assistantText) return;
-        try {
-          await ensureSession(capturedSessionId);
-          await saveMessage({ sessionId: capturedSessionId, role: 'user', content: capturedUserContent });
-          await saveMessage({ sessionId: capturedSessionId, role: 'assistant', content: assistantText });
-        } catch (e) {
-          console.error('[saveMessages] stream save error:', e);
-        }
-      }).catch((e: unknown) => {
-        console.error('[saveMessages] stream collect error:', e);
-      });
+      waitUntil(
+        collectStreamText(collectStream).then(async (assistantText) => {
+          await saveToSupabase(assistantText);
+        }).catch((e: unknown) => {
+          console.error('[saveMessages] stream collect error:', e);
+        })
+      );
     }
   } catch (e) {
     console.error('[saveMessages] response processing error:', e);
