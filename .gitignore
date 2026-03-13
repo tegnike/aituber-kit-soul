@@ -6,3 +6,5 @@ dist
 .env
 *.db
 *.db-*
+wrangler.jsonc
+.claude/settings.local.json
