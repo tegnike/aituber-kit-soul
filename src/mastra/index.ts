@@ -19,14 +19,17 @@ const lastMessageOnly = async (c: Context, next: Next) => {
   ) {
     try {
       const body = await c.req.json();
+      // パース済みbodyを後続ミドルウェアで共有
+      c.set('parsedBody', body);
       if (Array.isArray(body.messages) && body.messages.length > 1) {
         body.messages = [body.messages[body.messages.length - 1]];
-        c.req.raw = new Request(c.req.url, {
-          method: c.req.method,
-          headers: c.req.raw.headers,
-          body: JSON.stringify(body),
-        });
       }
+      // 常にbodyを再構築（Workers環境ではjson()後にbodyが消費されるため）
+      c.req.raw = new Request(c.req.url, {
+        method: c.req.method,
+        headers: c.req.raw.headers,
+        body: JSON.stringify(body),
+      });
     } catch {
       // bodyのパースに失敗した場合はそのまま通す
     }
@@ -75,59 +78,52 @@ async function collectStreamText(stream: ReadableStream<Uint8Array>): Promise<st
 }
 
 const saveMessages = async (c: Context, next: Next) => {
-  console.log('[saveMessages] middleware called:', c.req.method, c.req.path);
   if (
     c.req.method !== 'POST' ||
     !c.req.path.includes('/agents/') ||
     (!c.req.path.endsWith('/generate') && !c.req.path.endsWith('/stream'))
   ) {
-    console.log('[saveMessages] skipping - not a target path');
     return next();
   }
 
-  let body: Record<string, unknown>;
+  // lastMessageOnlyでパース済みのbodyを取得
+  const body = c.get('parsedBody') as Record<string, unknown> | undefined;
+  if (!body) {
+    console.log('[saveMessages] no parsedBody, skipping');
+    return next();
+  }
+
   let userContent: string | undefined;
   let sessionId: string | undefined;
 
-  try {
-    body = await c.req.json();
-
-    // ユーザーメッセージ取得
-    const messages = body.messages as Array<{ role: string; content: string }> | undefined;
-    if (Array.isArray(messages) && messages.length > 0) {
-      const last = messages[messages.length - 1];
-      if (typeof last.content === 'string') {
-        userContent = last.content;
-      }
+  // ユーザーメッセージ取得
+  const messages = body.messages as Array<{ role: string; content: string }> | undefined;
+  if (Array.isArray(messages) && messages.length > 0) {
+    const last = messages[messages.length - 1];
+    if (typeof last.content === 'string') {
+      userContent = last.content;
     }
+  }
 
-    // セッションID取得
-    const memory = body.memory as Record<string, unknown> | undefined;
-    if (memory?.thread) {
-      if (typeof memory.thread === 'string') {
-        sessionId = memory.thread;
-      } else if (typeof memory.thread === 'object' && memory.thread !== null && 'id' in memory.thread) {
-        sessionId = (memory.thread as { id: string }).id;
-      }
+  // セッションID取得
+  const memory = body.memory as Record<string, unknown> | undefined;
+  if (memory?.thread) {
+    if (typeof memory.thread === 'string') {
+      sessionId = memory.thread;
+    } else if (typeof memory.thread === 'object' && memory.thread !== null && 'id' in memory.thread) {
+      sessionId = (memory.thread as { id: string }).id;
     }
-    if (!sessionId && typeof body.threadId === 'string') {
-      sessionId = body.threadId;
-    }
-
-    // bodyを再構築（json()で消費されたため）
-    c.req.raw = new Request(c.req.url, {
-      method: c.req.method,
-      headers: c.req.raw.headers,
-      body: JSON.stringify(body),
-    });
-  } catch {
-    return next();
+  }
+  if (!sessionId && typeof body.threadId === 'string') {
+    sessionId = body.threadId;
   }
 
   if (!sessionId || !userContent) {
+    console.log('[saveMessages] no sessionId or userContent, skipping', { sessionId, userContent: !!userContent });
     return next();
   }
 
+  console.log('[saveMessages] will save for session:', sessionId);
   const isStream = c.req.path.endsWith('/stream');
   const capturedUserContent = userContent;
   const capturedSessionId = sessionId;
