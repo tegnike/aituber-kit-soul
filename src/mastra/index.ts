@@ -75,11 +75,13 @@ async function collectStreamText(stream: ReadableStream<Uint8Array>): Promise<st
 }
 
 const saveMessages = async (c: Context, next: Next) => {
+  console.log('[saveMessages] middleware called:', c.req.method, c.req.path);
   if (
     c.req.method !== 'POST' ||
     !c.req.path.includes('/agents/') ||
     (!c.req.path.endsWith('/generate') && !c.req.path.endsWith('/stream'))
   ) {
+    console.log('[saveMessages] skipping - not a target path');
     return next();
   }
 
