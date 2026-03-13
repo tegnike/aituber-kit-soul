@@ -24,6 +24,10 @@ const lastMessageOnly = async (c: Context, next: Next) => {
       if (Array.isArray(body.messages) && body.messages.length > 1) {
         body.messages = [body.messages[body.messages.length - 1]];
       }
+      // threadIdをMastraのmemory形式に変換
+      if (typeof body.threadId === 'string' && !body.memory) {
+        body.memory = { thread: body.threadId, resource: 'aituberkit-user' };
+      }
       // 常にbodyを再構築（Workers環境ではjson()後にbodyが消費されるため）
       c.req.raw = new Request(c.req.url, {
         method: c.req.method,
